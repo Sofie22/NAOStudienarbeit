@@ -2,13 +2,14 @@
 # -*- coding:utf-8 -*-
 
 # TODO: Specify Docs of function, add Doc for File and variables
-import sys
 import json
-from mariadb import Error, connect
+from NAOStudienarbeit.server.utils.functions import establish_connection
 
 
 # TODO: Add check for empty list, raise EmptyListError
 # TODO: change output to real json object
+
+        
 def get_all_synonyms() -> str:
     """Return all synonyms
 
@@ -17,22 +18,13 @@ def get_all_synonyms() -> str:
     :return: JSON as string
     :raise
     """
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
+    con = establish_connection()
 
     cur = con.cursor()
-    cur.execute("SELECT synonym, id FROM synonyms ORDER BY id")
-    syn_list = []
-    for synonym, syn_id in cur:
-        syn_list.append({'synonym': synonym, 'id': syn_id})
+    reqstr = f"SELECT synonym, id FROM synonyms ORDER BY id"
+    cur.execute(reqstr)
+    syn_list = [{'synonym': synonym, 'id': syn_id} for synonym, syn_id in cur]
+
     json_str = json.dumps(syn_list)
     con.close()
     return json_str
@@ -47,22 +39,14 @@ def get_all_generic_terms() -> str:
 
     :return: JSON as string
     """
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
+    con = establish_connection()
 
     cur = con.cursor()
-    cur.execute("SELECT id, generic_term FROM generic_terms ORDER BY id")
-    gt_list = []
-    for gt_id, generic_term in cur:
-        gt_list.append({'id': gt_id, 'generic_term': generic_term})
+    reqstr = f"SELECT id, generic_term FROM generic_terms ORDER BY id"
+    cur.execute(reqstr)
+    
+    gt_list = [{'id': gt_id, 'generic_term': generic_term} for gt_id, generic_term in cur]
+    
     json_str = json.dumps(gt_list)
     con.close()
     return json_str
@@ -77,90 +61,57 @@ def get_all_answers():
 
     :return: JSON as string
     """
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
+    con = establish_connection()
     cur = con.cursor()
-    cur.execute("SELECT caseID, primary_keywords, secondary_keywords, answer FROM matching_table ORDER BY caseID")
-    ans_list = []
-    for case_id, primary_keywords, secondary_keywords, answer in cur:
-        ans_list.append(
-            {'caseID': case_id, 'primary_keywords': primary_keywords, 'secondary_keywords': secondary_keywords,
-             'answer': answer})
+    reqstr= f"SELECT caseID, primary_keywords, secondary_keywords, answer FROM matching_table ORDER BY caseID"
+    cur.execute(reqstr)
+    ans_list = [
+                {'caseID': case_id, 'primary_keywords': primary_keywords, 'secondary_keywords': secondary_keywords,'answer': answer} 
+                for case_id, primary_keywords, secondary_keywords, answer in cur
+        ]
+    
     json_str = json.dumps(ans_list)
     con.close()
     return json_str
 
 
 def get_all_keywords() -> list:
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
+    con = establish_connection()
     cur = con.cursor()
-    cur.execute("SELECT primary_keywords, secondary_keywords FROM matching_table")
-    keywords = []
-    for primary_keywords, secondary_keywords in cur:
-        kwords = primary_keywords.split(",")
-        for kword in kwords:
-            keywords.append(kword)
-        kwords = secondary_keywords.split(",")
-        for kword in kwords:
-            keywords.append(kword)
+    reqstr = f"SELECT primary_keywords, secondary_keywords FROM matching_table"
+    cur.execute(reqstr)
+    keywords = [kword for primary_keywords, secondary_keywords in cur for kword in primary_keywords.split(",") + secondary_keywords.split(",")]
+
     return keywords
 
 
 # TODO: add checks for wrong returns, raise Error
 def get_generic_term(synonym: str) -> str:
-    """Searchs for the generic term of a synonym.
-
-    ADD DESCRIPTION
+    """Search for the generic term of a synonym.
 
     :param synonym: String of the word for which the generic term should be found.
-    :return: Returns the generic term as string if there is one for the synonym.
+    :return: Returns the generic term as a string if there is one for the synonym.
     :raise RASENError: Generic term is not in the database table.
     """
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
-
-    # Get cursor
+    con = establish_connection()
     cur = con.cursor()
-    reqstr = f"SELECT id, synonym FROM synonyms WHERE synonym='{synonym}'"
-    cur.execute(reqstr)
-    synonym_id = None
-    for (id, synonym) in cur:
-        synonym_id = id
+
+    # Get the synonym ID
+    reqstr_get_synonym_id = f"SELECT id FROM synonyms WHERE synonym=%s"
+    cur.execute(reqstr_get_synonym_id, (synonym,))
+    synonym_id = cur.fetchone()
+    
     if synonym_id is None:
         con.close()
         return None
-    reqstr = f"SELECT generic_term, id FROM generic_terms WHERE id={synonym_id}"
-    cur.execute(reqstr)
-    gen_term = None
-    for generic_term, id in cur:
-        gen_term = generic_term
+    
+    # Get the generic term associated with the synonym ID
+    reqstr_get_gen_term = f"SELECT generic_term FROM generic_terms WHERE id=%s"
+    cur.execute(reqstr_get_gen_term, (synonym_id[0],))
+    gen_term = cur.fetchone()
+    
     con.close()
-    return gen_term
+    return gen_term[0] if gen_term else None
 
 
 # TODO: add check for wrong case_id, raise InvalidCaseIDError
@@ -173,45 +124,26 @@ def get_answer(case_id: int) -> str:
     :return: Returns the answer as string if there is one.
     :raise InvalidCaseIDError: case_id is not in the database table.
     """
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
+    con = establish_connection()
 
     # Get cursor
     cur = con.cursor()
     reqstr = f"SELECT answer FROM matching_table WHERE caseID={case_id}"
     cur.execute(reqstr)
-    ans = None
-    for answer in cur:
-        ans = answer[0]
+    ans = "".join([answer[0] for answer in cur])
+    
     con.close()
     return ans
 
 
 def get_caseIDs_by_keywords(word: str):
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
+    con = establish_connection()
+    
     cur = con.cursor()
     reqstr = f"SELECT caseID FROM matching_table WHERE primary_keywords LIKE '%{word}%' OR secondary_keywords LIKE '%{word}%'"
     cur.execute(reqstr)
-    cID = []
-    for (caseID) in cur:
-        cID.append(caseID[0])
+    cID = [caseID[0] for caseID in cur]
+    
     if len(cID) == 0:
         con.close()
         return None
@@ -220,191 +152,118 @@ def get_caseIDs_by_keywords(word: str):
 
 
 def get_weight_of_keyword(keyword: str) -> float:
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
+    con = establish_connection()
     cur = con.cursor()
-    reqstr = f"SELECT weight FROM weights WHERE keyword='{keyword}'"
-    cur.execute(reqstr)
-    wgt = None
-    for weight in cur:
-        wgt = weight[0]
-    if wgt is None:
-        wgt = 0
+    reqstr = f"SELECT weight FROM weights WHERE keyword=%s"
+    cur.execute(reqstr, (keyword,))
+    weight = cur.fetchone()
+
     con.close()
-    return wgt
+    return weight[0] if weight else 0
 
 
 def get_primary_keywords_by_caseID(caseID: int):
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
+    con = establish_connection()
+    
     cur = con.cursor()
     reqstr = f"SELECT primary_keywords FROM matching_table WHERE caseID='{caseID}'"
     cur.execute(reqstr)
-    pri_key = None
-    for (primary_keywords) in cur:
-        pri_key = primary_keywords[0]
+    pri_key = [primary_keywords[0] for primary_keywords in cur] or None
+
     con.close()
     return pri_key
 
 
 def get_weights():
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
+    con = establish_connection()
+    
     cur = con.cursor()
     reqstr = f"SELECT keyword, weight FROM weights"
     cur.execute(reqstr)
     weights = []
-    for keyword, weight in cur:
-        weights.append({'keyword': keyword, 'weight': weight})
+    weights = [{'keyword': keyword, 'weight': weight} for keyword, weight in cur]
+    
     json_str = json.dumps(weights)
     con.close()
     return json_str
 
 
 # TODO: Add checks for arguments to catch wrong data
-def insert_answers(case_id: int, primary_keywords: str, secondary_keywords: str, answer: str):
-    """Insert data into matching table
+def insert_answers_batch(answers: list):
+    """Insert multiple answers into the matching table in a single batch.
 
-    :param case_id: The id as integer of the specific answer.
-    :param primary_keywords: Each primary keyword as string to identify the answer.
-    :param secondary_keywords: Each secondary keyword as string to identify the answer.
-    :param answer: The answer as string which will be said by nao.
-    :return:
+    :param answers: A list of tuples where each tuple contains (case_id, primary_keywords, secondary_keywords, answer)
     """
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
-
-    # Get cursor
+    con = establish_connection()
     cur = con.cursor()
-    cur.execute("INSERT INTO matching_table (caseID, primary_keywords, secondary_keywords, answer) VALUES (?, ?, ?, ?)",
-                (case_id, primary_keywords, secondary_keywords, answer))
+    cur.executemany(
+        "INSERT INTO matching_table (caseID, primary_keywords, secondary_keywords, answer) VALUES (%s, %s, %s, %s)",
+        answers
+    )
     con.commit()
     con.close()
-    print("Answer inserted with case_id=" + str(case_id) + ", primary_keywords=" + primary_keywords +
-          ", secondary_keywords=" + secondary_keywords + " and answer=" + answer)
+    print(f"{len(answers)} answers inserted.")
+    
+    
+# TODO: Add checks for arguments to catch wrong data
+def insert_generic_terms_batch(generic_terms_batch: list):
+    """Insert multiple generic terms into the generic_terms table in a single batch.
 
+    :param generic_terms_batch: A list of tuples where each tuple contains (id, generic_term)
+    """
+    con = establish_connection()
+    cur = con.cursor()
+    
+    cur.executemany(
+        "INSERT INTO generic_terms (id, generic_term) VALUES (%s, %s)",
+        generic_terms_batch
+    )
+    
+    con.commit()
+    con.close()
+    print(f"{len(generic_terms_batch)} generic terms inserted.")
 
 # TODO: Add checks for arguments to catch wrong data
-def insert_generic_terms(id: int, generic_term: str):
-    """Insert data into generics terms table
+def insert_synonyms_batch(synonyms_batch: list):
+    """Insert multiple synonyms into the synonyms table in a single batch.
 
-    :param id: ID as integer of the specific generic term.
-    :param generic_term: The generic term as string.
-    :return:
+    :param synonyms_batch: A list of tuples where each tuple contains (synonym, id)
     """
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
-
-    # Get cursor
+    con = establish_connection()
     cur = con.cursor()
-    cur.execute("INSERT INTO generic_terms (id, generic_term) VALUES (?, ?)", (id, generic_term))
+    
+    cur.executemany(
+        "INSERT INTO synonyms (synonym, id) VALUES (%s, %s)",
+        synonyms_batch
+    )
+    
     con.commit()
     con.close()
-    print("Generic term inserted with id=" + str(id) + " and generic_term=" + generic_term)
+    print(f"{len(synonyms_batch)} synonyms inserted.")
 
+def insert_weights_batch(weights_batch: list):
+    """Insert multiple weights into the weights table in a single batch.
 
-# TODO: Add checks for arguments to catch wrong data
-def insert_synonyms(synonym: str, id: int):
-    """Insert data into synonyms table
-
-    :param synonym: Synonym as string.
-    :param id: ID as integer which will represent the generic term.
-    :return:
+    :param weights_batch: A list of tuples where each tuple contains (keyword, weight)
     """
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
-
-    # Get cursor
+    con = establish_connection()
     cur = con.cursor()
-    cur.execute("INSERT INTO synonyms (synonym, id) VALUES (?, ?)", (synonym, id))
+    
+    cur.executemany(
+        "INSERT INTO weights (keyword, weight) VALUES (%s, %s)",
+        weights_batch
+    )
+    
     con.commit()
     con.close()
-    print("Synonym inserted with synonym=" + synonym + " and id=" + str(id))
-
-
-def insert_weight(keyword: str, weight: float):
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
-
-    # Get cursor
-    cur = con.cursor()
-    cur.execute("INSERT INTO weights (keyword, weight) VALUES (?, ?)", (keyword, weight))
-    con.commit()
-    con.close()
-    print("keyword=" + keyword + " with weight=" + str(weight) + " inserted")
-
+    print(f"{len(weights_batch)} weights inserted.")
+    
 def clear_tables():
     """Clears all 4 tables in the database
 
     :return: no return
     """
-    try:
-        con = connect(
-            host='127.0.0.1',
-            port=3306,
-            user="root",
-            password="passwort",
-            database="nao")
-    except Error as e:
-        print("Error connecting to MariaDB Platform: ", e)
-        sys.exit(1)
-
+    con = establish_connection()
     # Get cursor
     cur = con.cursor()
     cur.execute("DELETE FROM matching_table")
