@@ -4,10 +4,10 @@ def audioToText(audioPath):
     model = whisper.load_model("base")
     # load audio and pad/trim it to fit 30 seconds
     audio = whisper.load_audio(audioPath)
-    audio = whisper.pad_or_trim(audio)
+    trimmed_audio = whisper.pad_or_trim(audio)
 
     # make log-Mel spectrogram and move to the same device as the model
-    mel = whisper.log_mel_spectrogram(audio).to(model.device)
+    mel = whisper.log_mel_spectrogram(trimmed_audio).to(model.device)
 
     # decode the audio
     options = whisper.DecodingOptions(fp16=False)

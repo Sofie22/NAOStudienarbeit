@@ -1,71 +1,54 @@
-#!/usr/bin/python
-# -*- coding:utf-8 -*-
 import db_connector
 
 
-def count_ids(question: list) -> int:
-    counter = None
-    for word in question:
-        keyword_weight = db_connector.get_weight_of_keyword(word)
-        if keyword_weight is None:
-            keyword_weight = 0
+class Counter: 
+    def __init__(self, question: list): 
+        self.question = question
+        self.counters = []
+
+    def count_ids(self) -> int:
+        for word in self.question:
+            self.process_word(word)
+
+        return self.check_for_highest_id()
+
+    def process_word(self, word: str) -> None:
+        keyword_weight = db_connector.get_weight_of_keyword(word) or 0
+
         ids = db_connector.get_caseIDs_by_keywords(word)
         if ids is None:
-            continue
+            return
+
         for case_id in ids:
-            counter = check_list(counter, case_id, keyword_weight)
-    return check_for_highest_id(question, counter)
+            self.counters = self.update_counters(case_id, keyword_weight)
 
+    def update_counters(self, case_id: int, weight: float) -> list:
+        for counter in self.counters:
+            if case_id == counter["case_id"]:
+                counter["count"] += weight
+                break
+        else:
+            self.counters.append({"case_id": case_id, "count": weight})
+        
+        return self.counters
 
-def check_list(counter: list, case_id: int, weight: float) -> list:
-    if counter is None:
-        counter = [{"case_id": case_id, "count": weight}]
-        return counter
-    else:
-        i = 0
-        while i < len(counter):
-            if case_id == counter[i].get("case_id"):
-                counter[i].update({"count": counter[i].get("count") + weight})
-                return counter
-            i += 1
-        counter.append({"case_id": case_id, "count": weight})
-        return counter
+    def check_for_highest_id(self) -> int:
+        if not self.counters:
+            return None
 
+        highest_count = max(self.counters, key=lambda x: x["count"])["count"]
+        candidates = [counter for counter in self.counters if counter["count"] == highest_count]
+        
+        if len(candidates) > 1:
+            return self.resolve_tie(candidates)
+        return candidates[0]["case_id"]
 
-def check_for_highest_id(question: list, counter: list) -> int:
-    highest_count = None
-    case_id = None
-    i = 0
-    if counter is None:
-        return None
-    while i < len(counter):
-        if highest_count is None:
-            highest_count = counter[i].get("count")
-            case_id = counter[i].get("case_id")
-        elif highest_count < counter[i].get("count"):
-            highest_count = counter[i].get("count")
-            case_id = counter[i].get("case_id")
-        elif highest_count == counter[i].get("count"):
-            t_case_id = check_for_higher_id(question, case_id, counter[i].get("case_id"))
-            if t_case_id is not None:
-                case_id = t_case_id
-        i += 1
-    return case_id
+    def resolve_tie(self, candidates: list) -> int:
+        case_ids = [candidate["case_id"] for candidate in candidates]
+        return max(case_ids, key=lambda cid: self.compare_keyword_match(cid))
 
-
-def check_for_higher_id(question: list, case_id: int, new_case_id: int) -> int:
-    case_id_keywords = db_connector.get_primary_keywords_by_caseID(case_id)
-    case_id_counter = 0
-    new_case_id_keywords = db_connector.get_primary_keywords_by_caseID(new_case_id)
-    new_case_id_counter = 0
-    if case_id_keywords is None or new_case_id_keywords is None:
-        return None
-    for word in question:
-        if word in case_id_keywords:
-            case_id_counter += 1
-        if word in new_case_id_keywords:
-            new_case_id_counter += 1
-    if case_id_counter >= new_case_id_counter:
-        return case_id
-    else:
-        return new_case_id
+    def compare_keyword_match(self, case_id: int) -> int:
+        case_id_keywords = db_connector.get_primary_keywords_by_caseID(case_id)
+        if not case_id_keywords:
+            return 0
+        return len([word for word in self.question if word in case_id_keywords])
