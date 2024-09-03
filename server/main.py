@@ -24,7 +24,7 @@ def evaluate_args():
     if not (args.i or args.r):
         print("Use -h to get help with the arguments!")
 
-
+#test commit
 def run_server():
     config = configparser.ConfigParser()
     config.read("config.ini")
